@@ -20,6 +20,10 @@ import anthropic
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
+# ── Startup diagnostics ───────────────────────────────────────────────────────
+print(f"Working directory: {os.getcwd()}", flush=True)
+print(f"Files present: {os.listdir('.')}", flush=True)
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 INSIDER_INPUT    = "evenfield_filings.json"

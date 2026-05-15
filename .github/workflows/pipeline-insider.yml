@@ -49,6 +49,14 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
 
+      - name: Check pipeline output
+        run: |
+          echo "Working directory: $(pwd)"
+          echo "Files in current directory:"
+          ls -la *.json 2>/dev/null || echo "No JSON files found"
+          echo "evenfield_filings.json line count:"
+          wc -l evenfield_filings.json 2>/dev/null || echo "File does not exist"
+
       - name: Run enrichment (insider)
         run: python enrichment.py insider
         env:
