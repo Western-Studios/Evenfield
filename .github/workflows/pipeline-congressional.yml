@@ -1,0 +1,44 @@
+name: Congressional Pipeline (STOCK Act)
+
+on:
+  schedule:
+    # Runs every 4 hours UTC
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-congressional-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run congressional pipeline
+        run: python congressional_pipeline.py
+
+      - name: Run enrichment (congressional)
+        run: python enrichment.py congressional
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Upload enriched data to Supabase Storage
+        run: python scripts/upload_to_supabase.py congressional_enriched.json
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+
+      - name: Trigger Vercel production deploy
+        run: curl -s -o /dev/null -w "HTTP %{http_code}" -X POST "$VERCEL_DEPLOY_HOOK"
+        env:
+          VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}

@@ -1,0 +1,46 @@
+name: Insider Pipeline (SEC Form 4)
+
+on:
+  schedule:
+    # Runs every 2 hours UTC
+    - cron: '0 */2 * * *'
+  workflow_dispatch:  # allow manual trigger from GitHub Actions UI
+
+jobs:
+  run-insider-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Form 4 pipeline
+        run: python pipeline.py
+        env:
+          # pipeline.py uses no API key — all public SEC data
+
+      - name: Run enrichment (insider)
+        run: python enrichment.py insider
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Upload enriched data to Supabase Storage
+        run: python scripts/upload_to_supabase.py evenfield_enriched.json
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+
+      - name: Trigger Vercel production deploy
+        run: curl -s -o /dev/null -w "HTTP %{http_code}" -X POST "$VERCEL_DEPLOY_HOOK"
+        env:
+          VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}

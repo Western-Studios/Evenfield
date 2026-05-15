@@ -1,0 +1,39 @@
+name: Lobbying / Federal Contracts Pipeline
+
+on:
+  schedule:
+    # Runs once daily at 06:00 UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-lobbying-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run lobbying / federal contracts pipeline
+        run: python lobbying_pipeline.py
+
+      - name: Upload data to Supabase Storage
+        run: python scripts/upload_to_supabase.py lobbying_data.json
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+
+      - name: Trigger Vercel production deploy
+        run: curl -s -o /dev/null -w "HTTP %{http_code}" -X POST "$VERCEL_DEPLOY_HOOK"
+        env:
+          VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}

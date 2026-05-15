@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(python enrichment.py)",
+      "Bash(python -c \"import os; keys=[k for k in os.environ if 'ANTHROPIC' in k.upper\\(\\) or 'CLAUDE' in k.upper\\(\\)]; print\\(keys or 'none found'\\)\")",
+      "Bash(python -c \"import os; key=os.environ.get\\('ANTHROPIC_API_KEY',''\\); print\\('key present:', bool\\(key\\), '| prefix:', key[:8] if key else 'none'\\)\")",
+      "Bash(python -c \"import os; key=os.environ.get\\('ANTHROPIC_API_KEY',''\\); print\\(bool\\(key\\), key[:12] if key else 'missing'\\)\")",
+      "Bash(python -c \"import os; v=os.environ.get\\('ANTHROPIC_API_KEY','MISSING'\\); print\\(repr\\(v[:20]\\) if v != 'MISSING' else 'MISSING'\\)\")",
+      "PowerShell(cd C:\\\\Users\\\\kpbon\\\\WebsiteApps\\\\Evenfield; $key = \\(Get-ItemProperty -Path \"HKCU:\\\\Environment\" -Name \"ANTHROPIC_API_KEY\" -ErrorAction SilentlyContinue\\).ANTHROPIC_API_KEY; if \\($key\\) { $env:ANTHROPIC_API_KEY = $key; python enrichment.py } else { Write-Host \"API key not found in registry\" })",
+      "PowerShell(Copy-Item \"C:\\\\Users\\\\kpbon\\\\WebsiteApps\\\\Evenfield\\\\evenfield_enriched.json\" \"C:\\\\Users\\\\kpbon\\\\WebsiteApps\\\\Evenfield\\\\web\\\\public\\\\evenfield_enriched.json\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\kpbon\\\\WebsiteApps\\\\Evenfield\\\\web\\\\.claude\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\kpbon\\\\WebsiteApps\\\\Evenfield\\\\.claude\")",
+      "mcp__Claude_Preview__preview_start",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\kpbon\\\\WebsiteApps\\\\Evenfield\\\\\" | Select-Object Name, @{N='SizeKB';E={[math]::Round\\($_.Length/1KB,1\\)}})",
+      "Bash(npm run *)",
+      "Bash(npx vercel *)",
+      "Bash(npm install *)",
+      "Bash(npx vite *)",
+      "Bash(cd /mnt/c/Users/kpbon/WebsiteApps/Evenfield/web && npx vite build 2>&1)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git branch *)",
+      "Bash(git remote *)"
+    ]
+  }
+}
