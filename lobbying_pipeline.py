@@ -4,6 +4,7 @@ Pulls federal contracts >$10M from USASpending.gov and cross-references
 with known insider-trade tickers. No API key required.
 """
 
+import argparse
 import gzip
 import io
 import json
@@ -20,6 +21,12 @@ _SSL_CTX.check_hostname = False
 _SSL_CTX.verify_mode = ssl.CERT_NONE
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+
+# ── CLI args — parsed at module level so they're available everywhere ─────────
+parser = argparse.ArgumentParser()
+parser.add_argument("--once", action="store_true",
+                    help="Run one cycle and exit (for GitHub Actions)")
+args = parser.parse_args()  # lobbying pipeline is always single-run; --once accepted for consistency
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -232,9 +239,4 @@ def run_pipeline():
 
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--once", action="store_true",
-                        help="Run one cycle and exit (for CI/GitHub Actions)")
-    parser.parse_args()  # accept --once; lobbying pipeline is always single-run
     run_pipeline()

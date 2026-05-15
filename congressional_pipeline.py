@@ -4,6 +4,7 @@ Pulls STOCK Act trade disclosures from Quiver Quantitative (primary)
 with SEC EFTS fallback. Runs every 4 hours.
 """
 
+import argparse
 import gzip
 import io
 import json
@@ -15,6 +16,14 @@ import urllib.request
 import urllib.error
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+
+# ── CLI args — parsed at module level so they're available everywhere ─────────
+parser = argparse.ArgumentParser()
+parser.add_argument("--once", action="store_true",
+                    help="Run one cycle and exit (for GitHub Actions)")
+parser.add_argument("--loop", action="store_true",
+                    help="Run continuously on POLL_INTERVAL_SECONDS (local dev)")
+args = parser.parse_args()
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -303,21 +312,10 @@ def run_pipeline():
 
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--once", action="store_true",
-                        help="Run one cycle and exit (for CI/GitHub Actions)")
-    parser.add_argument("--loop", action="store_true",
-                        help="Run continuously on POLL_INTERVAL_SECONDS (local dev)")
-    args = parser.parse_args()
-
     print("\n" + "═" * 62)
     print("  EVENFIELD — Congressional Trades Pipeline")
     print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    if args.loop:
-        print("  Mode: continuous loop")
-    else:
-        print("  Mode: single-run")
+    print(f"  Mode: {'continuous loop' if args.loop else 'single-run (--once)'}")
     print("═" * 62 + "\n")
 
     if args.loop:

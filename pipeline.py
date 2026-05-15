@@ -4,6 +4,7 @@ Pulls Form 4 insider trading filings from SEC EDGAR
 No API key required - all public data
 """
 
+import argparse
 import gzip
 import json
 import socket
@@ -14,6 +15,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 import urllib.request
 import urllib.error
+
+# ── CLI args — parsed at module level so they're available everywhere ─────────
+parser = argparse.ArgumentParser()
+parser.add_argument("--once", action="store_true",
+                    help="Run one cycle and exit (for GitHub Actions)")
+args = parser.parse_args()
 
 # ── Unbuffered output — GitHub Actions shows logs in real time ────────────────
 sys.stdout.reconfigure(line_buffering=True)
@@ -346,11 +353,11 @@ def parse_form4_xml(xml_text, meta):
 
 # ── Main Loop ─────────────────────────────────────────────────────────────────
 
-def run_pipeline(once=False):
+def run_pipeline():
     print("\n" + "═" * 60)
     print("  EVENFIELD — Phase 1 Data Pipeline")
     print("  Monitoring SEC EDGAR Form 4 Insider Filings")
-    if once:
+    if args.once:
         print("  Mode: single-run (--once)")
     print("═" * 60 + "\n")
 
@@ -437,7 +444,7 @@ def run_pipeline(once=False):
         else:
             print(f"  ✓ No new filings this cycle")
 
-        if once:
+        if args.once:
             print("  --once flag set — exiting after one cycle.")
             break
 
@@ -446,13 +453,7 @@ def run_pipeline(once=False):
 
 
 if __name__ == "__main__":
-    import argparse, io
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--once", action="store_true",
-                        help="Run one cycle and exit (for CI/GitHub Actions)")
-    args = parser.parse_args()
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     try:
-        run_pipeline(once=args.once)
+        run_pipeline()
     except KeyboardInterrupt:
         print("\n\nPipeline stopped. Data saved.")
