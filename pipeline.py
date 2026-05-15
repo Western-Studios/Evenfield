@@ -6,6 +6,7 @@ No API key required - all public data
 
 import gzip
 import json
+import socket
 import sys
 import time
 import xml.etree.ElementTree as ET
@@ -13,6 +14,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 import urllib.request
 import urllib.error
+
+# ── Unbuffered output — GitHub Actions shows logs in real time ────────────────
+sys.stdout.reconfigure(line_buffering=True)
+
+# ── Hard socket timeout — catches hangs that urllib's timeout misses ──────────
+socket.setdefaulttimeout(10)
 
 # ── Runtime guard (CI / GitHub Actions) ──────────────────────────────────────
 START_TIME = time.time()
@@ -61,30 +68,35 @@ TRANSACTION_CODES = {
 
 def fetch_url(url):
     """Fetch a URL with proper headers, return text or None on failure."""
+    print(f"  Fetching: {url[:80]}...", flush=True)
     req = urllib.request.Request(url, headers=HEADERS)
     try:
         with urllib.request.urlopen(req, timeout=10) as response:
             raw = response.read()
             if raw[:2] == b'\x1f\x8b':
                 raw = gzip.decompress(raw)
-            return raw.decode("utf-8", errors="replace")
+            result = raw.decode("utf-8", errors="replace")
+            print(f"  Response received: {len(result)} chars", flush=True)
+            return result
     except urllib.error.HTTPError as e:
-        print(f"  [HTTP {e.code}] {url}")
+        print(f"  [HTTP {e.code}] {url}", flush=True)
         return None
     except Exception as e:
-        print(f"  [Error fetching URL] {e}")
+        print(f"  [Error fetching URL] {type(e).__name__}: {e}", flush=True)
         return None
 
 
 def fetch_url_with_retry(url, max_retries=3):
     """Fetch a URL, retrying up to max_retries times with a 2s delay."""
     for attempt in range(max_retries):
+        print(f"  Attempt {attempt + 1}/{max_retries}: {url[:80]}...", flush=True)
         result = fetch_url(url)
         if result:
             return result
         if attempt < max_retries - 1:
-            print(f"  Retry {attempt + 1}/{max_retries - 1}...")
+            print(f"  Retry {attempt + 1}/{max_retries - 1} in 2s...", flush=True)
             time.sleep(2)
+    print(f"  All {max_retries} attempts failed for: {url[:80]}", flush=True)
     return None
 
 
