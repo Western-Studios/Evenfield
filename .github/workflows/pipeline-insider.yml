@@ -52,10 +52,12 @@ jobs:
       - name: Check pipeline output
         run: |
           echo "Working directory: $(pwd)"
-          echo "Files in current directory:"
+          echo "--- JSON files ---"
           ls -la *.json 2>/dev/null || echo "No JSON files found"
-          echo "evenfield_filings.json line count:"
-          wc -l evenfield_filings.json 2>/dev/null || echo "File does not exist"
+          echo "--- evenfield_filings.json (first 40 lines) ---"
+          head -40 evenfield_filings.json 2>/dev/null || echo "File does not exist"
+          echo "--- filing count ---"
+          python -c "import json; d=json.load(open('evenfield_filings.json')); print(f'{len(d)} filing(s) in file')" 2>/dev/null || echo "Could not parse file"
 
       - name: Run enrichment (insider)
         run: python enrichment.py insider

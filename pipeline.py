@@ -154,7 +154,12 @@ def get_recent_form4_entries():
     today = date.today()
     start = (today - timedelta(days=5)).isoformat()
     end   = today.isoformat()
-    url   = f"{EFTS_BASE}&startdt={start}&enddt={end}"
+    # Request entity_id (issuer CIK) explicitly — the accession number prefix
+    # is the SUBMITTER CIK (often a filing agent), not the issuer's CIK.
+    url = (
+        f"{EFTS_BASE}&startdt={start}&enddt={end}"
+        "&hits.hits._source=file_date,entity_name,entity_id,period_of_report"
+    )
 
     print(f"  Checking EFTS API for Form 4 filings ({start} → {end})...", flush=True)
     text = fetch_url_with_retry(url)
@@ -164,12 +169,12 @@ def get_recent_form4_entries():
     try:
         data = json.loads(text)
     except json.JSONDecodeError as e:
-        print(f"  [JSON parse error] {e}")
+        print(f"  [JSON parse error] {e}", flush=True)
         return []
 
     hits = data.get("hits", {}).get("hits", [])
     total = data.get("hits", {}).get("total", {}).get("value", len(hits))
-    print(f"  Found {total} filing(s) between {start} and {end}", flush=True)
+    print(f"  Found {total} filing(s) between {start} and {end} ({len(hits)} returned)", flush=True)
 
     entries = []
     for hit in hits:
@@ -179,22 +184,29 @@ def get_recent_form4_entries():
 
         source = hit.get("_source", {})
 
-        # Derive CIK from the first segment of the accession number.
-        # Accession format: XXXXXXXXXX-YY-NNNNNN  (first 10 digits = submitter CIK)
-        parts = accession_dashed.split("-")
-        try:
-            cik = str(int(parts[0]))  # strip leading zeros
-        except (ValueError, IndexError):
-            continue
+        # Prefer entity_id from EFTS (_source) — this is the issuer's CIK.
+        # Fall back to first segment of accession number (submitter CIK).
+        entity_id = str(source.get("entity_id", "")).strip().lstrip("0")
+        if entity_id:
+            cik = entity_id
+        else:
+            parts = accession_dashed.split("-")
+            try:
+                cik = str(int(parts[0]))  # strip leading zeros
+            except (ValueError, IndexError):
+                print(f"  [Skipping — cannot derive CIK from {accession_dashed}]", flush=True)
+                continue
 
         accession_no_dash = accession_dashed.replace("-", "")
         filing_url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession_no_dash}-index.htm"
+
+        print(f"  → {accession_dashed}  CIK={cik}  {source.get('entity_name','?')}", flush=True)
 
         entries.append({
             "id":         accession_dashed,
             "filing_url": filing_url,
             "title":      source.get("entity_name", "Unknown"),
-            "filed_at":   source.get("file_date", today),
+            "filed_at":   source.get("file_date", end),
         })
 
     return entries
