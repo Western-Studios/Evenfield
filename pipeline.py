@@ -6,6 +6,7 @@ No API key required - all public data
 
 import gzip
 import json
+import sys
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -13,16 +14,21 @@ from pathlib import Path
 import urllib.request
 import urllib.error
 
+# ── Runtime guard (CI / GitHub Actions) ──────────────────────────────────────
+START_TIME = time.time()
+MAX_RUNTIME = 20 * 60  # 20 minutes — exit cleanly before GHA 30-min timeout
+
 # ── Configuration ────────────────────────────────────────────────────────────
 
 POLL_INTERVAL_SECONDS = 120          # Check for new filings every 2 minutes
 OUTPUT_FILE = "evenfield_filings.json"
 SEEN_FILE = "seen_filings.json"      # Tracks filings we've already processed
 
-# SEC requires a descriptive User-Agent — replace with your contact info
+# Browser-like User-Agent — SEC/EDGAR may block plain bot strings from CI IPs
 HEADERS = {
-    "User-Agent": "Evenfield/1.0 Kyle Bond kyle.p.bond@gmail.com",
-    "Accept-Encoding": "gzip, deflate",
+    "User-Agent": "Mozilla/5.0 (compatible; Evenfield/1.0; +https://evenfield.app; contact@evenfield.app)",
+    "Accept": "application/atom+xml,application/xml,text/xml,*/*",
+    "Accept-Language": "en-US,en;q=0.9",
 }
 
 # EDGAR RSS feed for Form 4 filings (real-time, updated continuously)
@@ -56,7 +62,7 @@ def fetch_url(url):
     """Fetch a URL with proper headers, return text or None on failure."""
     req = urllib.request.Request(url, headers=HEADERS)
     try:
-        with urllib.request.urlopen(req, timeout=15) as response:
+        with urllib.request.urlopen(req, timeout=10) as response:
             raw = response.read()
             if raw[:2] == b'\x1f\x8b':
                 raw = gzip.decompress(raw)
@@ -67,6 +73,18 @@ def fetch_url(url):
     except Exception as e:
         print(f"  [Error fetching URL] {e}")
         return None
+
+
+def fetch_url_with_retry(url, max_retries=3):
+    """Fetch a URL, retrying up to max_retries times with a 2s delay."""
+    for attempt in range(max_retries):
+        result = fetch_url(url)
+        if result:
+            return result
+        if attempt < max_retries - 1:
+            print(f"  Retry {attempt + 1}/{max_retries - 1}...")
+            time.sleep(2)
+    return None
 
 
 def load_json_file(path):
@@ -112,9 +130,9 @@ def get_recent_form4_entries():
     {accession_id, filing_url, company, filed_at} dicts.
     """
     print("  Checking EDGAR RSS feed...")
-    xml_text = fetch_url(EDGAR_RSS_URL)
+    xml_text = fetch_url_with_retry(EDGAR_RSS_URL)
     if not xml_text:
-        return []
+        return None  # None = unreachable (caller handles graceful exit)
 
     entries = []
     try:
@@ -153,7 +171,7 @@ def get_form4_xml_url(index_url):
     EDGAR serves two XML entries per filing: one inside xslF345X06/ (XSLT display
     wrapper) and one bare. We skip the wrapper and take the raw XML.
     """
-    html = fetch_url(index_url)
+    html = fetch_url_with_retry(index_url)
     if not html:
         return None
 
@@ -314,14 +332,33 @@ def run_pipeline():
     cycle = 0
 
     while True:
+        # ── Runtime guard ──────────────────────────────────────────────────────
+        elapsed = time.time() - START_TIME
+        if elapsed > MAX_RUNTIME:
+            print(f"\nMax runtime reached ({MAX_RUNTIME // 60} min) — exiting cleanly.")
+            print(f"Processed {len(all_filings)} total filing(s) across {cycle} cycle(s).")
+            break
+
         cycle += 1
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"[Cycle {cycle}] {now}")
 
         entries = get_recent_form4_entries()
+
+        # ── EDGAR unreachable ──────────────────────────────────────────────────
+        if entries is None:
+            print("EDGAR unreachable from this runner — will retry on next scheduled run")
+            save_json_file(OUTPUT_FILE, all_filings)
+            save_json_file(SEEN_FILE, seen)
+            sys.exit(0)
+
         new_count = 0
 
         for entry in entries:
+            # ── Per-entry runtime check ────────────────────────────────────────
+            if time.time() - START_TIME > MAX_RUNTIME:
+                print("Max runtime reached mid-cycle — saving and exiting cleanly.")
+                break
             filing_id = entry["id"]
 
             # Skip already processed filings
@@ -374,7 +411,7 @@ def run_pipeline():
 
 
 if __name__ == "__main__":
-    import sys, io
+    import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     try:
         run_pipeline()
