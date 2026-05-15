@@ -39,6 +39,19 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
 
       - name: Trigger Vercel production deploy
-        run: curl -s -o /dev/null -w "HTTP %{http_code}" -X POST "$VERCEL_DEPLOY_HOOK"
+        run: |
+          if [ -z "$VERCEL_DEPLOY_HOOK" ]; then
+            echo "ERROR: VERCEL_DEPLOY_HOOK secret is empty or not set"
+            exit 1
+          fi
+          echo "Triggering Vercel deploy..."
+          HTTP_CODE=$(curl -s -o /tmp/vercel_response.txt -w "%{http_code}" -X POST "$VERCEL_DEPLOY_HOOK")
+          cat /tmp/vercel_response.txt
+          echo "HTTP response code: $HTTP_CODE"
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
+            echo "ERROR: Vercel deploy hook returned $HTTP_CODE"
+            exit 1
+          fi
+          echo "Vercel deploy triggered successfully"
         env:
           VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
