@@ -232,4 +232,9 @@ def run_pipeline():
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--once", action="store_true",
+                        help="Run one cycle and exit (for CI/GitHub Actions)")
+    parser.parse_args()  # accept --once; lobbying pipeline is always single-run
     run_pipeline()

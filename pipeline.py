@@ -346,10 +346,12 @@ def parse_form4_xml(xml_text, meta):
 
 # ── Main Loop ─────────────────────────────────────────────────────────────────
 
-def run_pipeline():
+def run_pipeline(once=False):
     print("\n" + "═" * 60)
     print("  EVENFIELD — Phase 1 Data Pipeline")
     print("  Monitoring SEC EDGAR Form 4 Insider Filings")
+    if once:
+        print("  Mode: single-run (--once)")
     print("═" * 60 + "\n")
 
     # Load previously seen filing IDs so we don't re-process
@@ -435,14 +437,22 @@ def run_pipeline():
         else:
             print(f"  ✓ No new filings this cycle")
 
+        if once:
+            print("  --once flag set — exiting after one cycle.")
+            break
+
         print(f"  Waiting {POLL_INTERVAL_SECONDS}s before next check...\n")
         time.sleep(POLL_INTERVAL_SECONDS)
 
 
 if __name__ == "__main__":
-    import io
+    import argparse, io
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--once", action="store_true",
+                        help="Run one cycle and exit (for CI/GitHub Actions)")
+    args = parser.parse_args()
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     try:
-        run_pipeline()
+        run_pipeline(once=args.once)
     except KeyboardInterrupt:
         print("\n\nPipeline stopped. Data saved.")

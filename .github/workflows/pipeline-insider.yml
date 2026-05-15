@@ -43,7 +43,7 @@ jobs:
 
       - name: Run Form 4 pipeline
         timeout-minutes: 10
-        run: python pipeline.py
+        run: python pipeline.py --once
         env:
           PYTHONUNBUFFERED: "1"
 

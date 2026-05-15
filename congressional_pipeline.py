@@ -303,13 +303,24 @@ def run_pipeline():
 
 
 if __name__ == "__main__":
-    # Single-run mode if called directly; loop mode via run_pipeline()
-    import sys as _sys
-    if "--loop" in _sys.argv:
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--once", action="store_true",
+                        help="Run one cycle and exit (for CI/GitHub Actions)")
+    parser.add_argument("--loop", action="store_true",
+                        help="Run continuously on POLL_INTERVAL_SECONDS (local dev)")
+    args = parser.parse_args()
+
+    print("\n" + "═" * 62)
+    print("  EVENFIELD — Congressional Trades Pipeline")
+    print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    if args.loop:
+        print("  Mode: continuous loop")
+    else:
+        print("  Mode: single-run")
+    print("═" * 62 + "\n")
+
+    if args.loop:
         run_pipeline()
     else:
-        print("\n" + "═" * 62)
-        print("  EVENFIELD — Congressional Trades Pipeline")
-        print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("═" * 62 + "\n")
         run_once()

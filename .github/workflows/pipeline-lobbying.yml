@@ -25,7 +25,10 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run lobbying / federal contracts pipeline
-        run: python lobbying_pipeline.py
+        timeout-minutes: 10
+        run: python lobbying_pipeline.py --once
+        env:
+          PYTHONUNBUFFERED: "1"
 
       - name: Upload data to Supabase Storage
         run: python scripts/upload_to_supabase.py lobbying_data.json

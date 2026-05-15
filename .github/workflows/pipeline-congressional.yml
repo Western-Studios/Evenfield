@@ -25,7 +25,10 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run congressional pipeline
-        run: python congressional_pipeline.py
+        timeout-minutes: 10
+        run: python congressional_pipeline.py --once
+        env:
+          PYTHONUNBUFFERED: "1"
 
       - name: Run enrichment (congressional)
         run: python enrichment.py congressional
