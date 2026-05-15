@@ -150,11 +150,13 @@ def get_recent_form4_entries():
     Returns a list of {id, filing_url, title, filed_at} dicts,
     None if EDGAR is completely unreachable after retries.
     """
-    from datetime import date
-    today = date.today().isoformat()
-    url = f"{EFTS_BASE}&startdt={today}&enddt={today}"
+    from datetime import date, timedelta
+    today = date.today()
+    start = (today - timedelta(days=5)).isoformat()
+    end   = today.isoformat()
+    url   = f"{EFTS_BASE}&startdt={start}&enddt={end}"
 
-    print(f"  Checking EFTS API for Form 4 filings ({today})...")
+    print(f"  Checking EFTS API for Form 4 filings ({start} → {end})...", flush=True)
     text = fetch_url_with_retry(url)
     if not text:
         return None  # None = unreachable (caller handles graceful exit)
@@ -167,7 +169,7 @@ def get_recent_form4_entries():
 
     hits = data.get("hits", {}).get("hits", [])
     total = data.get("hits", {}).get("total", {}).get("value", len(hits))
-    print(f"  Found {total} filing(s) for {today}")
+    print(f"  Found {total} filing(s) between {start} and {end}", flush=True)
 
     entries = []
     for hit in hits:
