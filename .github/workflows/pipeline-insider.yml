@@ -26,8 +26,6 @@ jobs:
 
       - name: Run Form 4 pipeline
         run: python pipeline.py
-        env:
-          # pipeline.py uses no API key — all public SEC data
 
       - name: Run enrichment (insider)
         run: python enrichment.py insider
