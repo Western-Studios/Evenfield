@@ -31,8 +31,9 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-# EDGAR RSS feed for Form 4 filings (real-time, updated continuously)
-EDGAR_RSS_URL = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&dateb=&owner=include&count=40&search_text=&output=atom"
+# EDGAR EFTS (full-text search) API — JSON, different rate-limiting from RSS feed
+# URL is built dynamically per-run using today's date (see get_recent_form4_entries)
+EFTS_BASE = "https://efts.sec.gov/LATEST/search-index?q=%22%22&forms=4&dateRange=custom"
 
 # Transaction codes and what they mean in plain English
 TRANSACTION_CODES = {
@@ -122,42 +123,58 @@ def format_shares(value):
         return str(value)
 
 
-# ── RSS Feed Parsing ──────────────────────────────────────────────────────────
+# ── EFTS Feed Parsing ─────────────────────────────────────────────────────────
 
 def get_recent_form4_entries():
     """
-    Fetch the EDGAR RSS feed and return a list of
-    {accession_id, filing_url, company, filed_at} dicts.
+    Fetch Form 4 filings from EDGAR's EFTS (full-text search) JSON API.
+    Returns a list of {id, filing_url, title, filed_at} dicts,
+    None if EDGAR is completely unreachable after retries.
     """
-    print("  Checking EDGAR RSS feed...")
-    xml_text = fetch_url_with_retry(EDGAR_RSS_URL)
-    if not xml_text:
+    from datetime import date
+    today = date.today().isoformat()
+    url = f"{EFTS_BASE}&startdt={today}&enddt={today}"
+
+    print(f"  Checking EFTS API for Form 4 filings ({today})...")
+    text = fetch_url_with_retry(url)
+    if not text:
         return None  # None = unreachable (caller handles graceful exit)
 
-    entries = []
     try:
-        # Strip default namespace so ElementTree finds tags easily
-        xml_text = xml_text.replace(' xmlns="http://www.w3.org/2005/Atom"', "")
-        root = ET.fromstring(xml_text)
+        data = json.loads(text)
+    except json.JSONDecodeError as e:
+        print(f"  [JSON parse error] {e}")
+        return []
 
-        for entry in root.findall("entry"):
-            filing_id = (entry.findtext("id") or "").strip()
-            updated   = (entry.findtext("updated") or "").strip()
-            title     = (entry.findtext("title") or "").strip()
+    hits = data.get("hits", {}).get("hits", [])
+    total = data.get("hits", {}).get("total", {}).get("value", len(hits))
+    print(f"  Found {total} filing(s) for {today}")
 
-            # The filing index link is in <link href="..."/>
-            link_el = entry.find("link")
-            filing_url = link_el.get("href", "") if link_el is not None else ""
+    entries = []
+    for hit in hits:
+        accession_dashed = hit.get("_id", "").strip()
+        if not accession_dashed:
+            continue
 
-            if filing_id and filing_url:
-                entries.append({
-                    "id":          filing_id,
-                    "filing_url":  filing_url,
-                    "title":       title,
-                    "filed_at":    updated,
-                })
-    except ET.ParseError as e:
-        print(f"  [XML parse error] {e}")
+        source = hit.get("_source", {})
+
+        # Derive CIK from the first segment of the accession number.
+        # Accession format: XXXXXXXXXX-YY-NNNNNN  (first 10 digits = submitter CIK)
+        parts = accession_dashed.split("-")
+        try:
+            cik = str(int(parts[0]))  # strip leading zeros
+        except (ValueError, IndexError):
+            continue
+
+        accession_no_dash = accession_dashed.replace("-", "")
+        filing_url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession_no_dash}-index.htm"
+
+        entries.append({
+            "id":         accession_dashed,
+            "filing_url": filing_url,
+            "title":      source.get("entity_name", "Unknown"),
+            "filed_at":   source.get("file_date", today),
+        })
 
     return entries
 
