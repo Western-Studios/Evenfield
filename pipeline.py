@@ -39,9 +39,26 @@ OUTPUT_FILE = "evenfield_filings.json"
 SEEN_FILE = "seen_filings.json"      # Tracks filings we've already processed
 
 # Browser-like User-Agent — SEC/EDGAR may block plain bot strings from CI IPs
+UA = "Mozilla/5.0 (compatible; Evenfield/1.0; +https://evenfield.app; contact@evenfield.app)"
+
+# HTML index pages — accept text/html so EDGAR doesn't serve the XSLT-rendered XML
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; Evenfield/1.0; +https://evenfield.app; contact@evenfield.app)",
-    "Accept": "application/atom+xml,application/xml,text/xml,*/*",
+    "User-Agent":      UA,
+    "Accept":          "text/html,application/xhtml+xml,*/*;q=0.9",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+# JSON API (EFTS search endpoint)
+JSON_HEADERS = {
+    "User-Agent":      UA,
+    "Accept":          "application/json,*/*;q=0.9",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+# Form 4 XML documents
+XML_HEADERS = {
+    "User-Agent":      UA,
+    "Accept":          "text/xml,application/xml,*/*;q=0.9",
     "Accept-Language": "en-US,en;q=0.9",
 }
 
@@ -73,10 +90,11 @@ TRANSACTION_CODES = {
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def fetch_url(url):
-    """Fetch a URL with proper headers, return text or None on failure."""
+def fetch_url(url, headers=None):
+    """Fetch a URL, return text or None on failure."""
+    h = headers or HEADERS
     print(f"  Fetching: {url[:80]}...", flush=True)
-    req = urllib.request.Request(url, headers=HEADERS)
+    req = urllib.request.Request(url, headers=h)
     try:
         with urllib.request.urlopen(req, timeout=10) as response:
             raw = response.read()
@@ -93,11 +111,11 @@ def fetch_url(url):
         return None
 
 
-def fetch_url_with_retry(url, max_retries=3):
+def fetch_url_with_retry(url, headers=None, max_retries=3):
     """Fetch a URL, retrying up to max_retries times with a 2s delay."""
     for attempt in range(max_retries):
         print(f"  Attempt {attempt + 1}/{max_retries}: {url[:80]}...", flush=True)
-        result = fetch_url(url)
+        result = fetch_url(url, headers=headers)
         if result:
             return result
         if attempt < max_retries - 1:
@@ -162,7 +180,7 @@ def get_recent_form4_entries():
     )
 
     print(f"  Checking EFTS API for Form 4 filings ({start} → {end})...", flush=True)
-    text = fetch_url_with_retry(url)
+    text = fetch_url_with_retry(url, headers=JSON_HEADERS)
     if not text:
         return None  # None = unreachable (caller handles graceful exit)
 
@@ -217,11 +235,25 @@ def get_recent_form4_entries():
 def get_form4_xml_url(index_url):
     """
     Given a filing index URL, find the actual Form 4 XML document URL.
-    Index URL looks like: https://www.sec.gov/Archives/edgar/data/CIK/ACCESSION-INDEX.htm
-    EDGAR serves two XML entries per filing: one inside xslF345X06/ (XSLT display
-    wrapper) and one bare. We skip the wrapper and take the raw XML.
+    Strategy:
+      1. Try constructing the XML URL directly from the accession number
+         (most Form 4s follow this pattern).
+      2. Fall back to parsing the HTML index page for an XML link.
     """
-    html = fetch_url_with_retry(index_url)
+    # ── Strategy 1: direct URL construction ───────────────────────────────────
+    # index_url: .../edgar/data/{CIK}/{ACCESSION_NO_DASH}-index.htm
+    # XML lives at: .../edgar/data/{CIK}/{ACCESSION_NO_DASH}.xml
+    if index_url.endswith("-index.htm"):
+        direct_xml = index_url[:-len("-index.htm")] + ".xml"
+        print(f"  Trying direct XML URL: {direct_xml[:80]}", flush=True)
+        result = fetch_url(direct_xml, headers=XML_HEADERS)
+        if result and "<ownershipDocument" in result:
+            print("  Direct XML URL worked.", flush=True)
+            return direct_xml
+
+    # ── Strategy 2: parse the HTML index page ─────────────────────────────────
+    print(f"  Falling back to HTML index parse: {index_url[:80]}", flush=True)
+    html = fetch_url_with_retry(index_url, headers=HEADERS)
     if not html:
         return None
 
@@ -245,8 +277,11 @@ def get_form4_xml_url(index_url):
         candidates.append(path)
 
     if candidates:
+        print(f"  Found {len(candidates)} XML candidate(s) in index page.", flush=True)
         return "https://www.sec.gov" + candidates[0]
 
+    # Log first 500 chars of the index page so we can see what EDGAR returned
+    print(f"  [No XML found in index page] First 300 chars: {html[:300]!r}", flush=True)
     return None
 
 
@@ -431,7 +466,7 @@ def run_pipeline():
                 continue
 
             # Fetch and parse the Form 4 XML
-            xml_text = fetch_url(xml_url)
+            xml_text = fetch_url(xml_url, headers=XML_HEADERS)
             if not xml_text:
                 print("    [Could not fetch XML — skipping]", flush=True)
                 fetch_err += 1
