@@ -404,44 +404,52 @@ def run_pipeline():
             save_json_file(SEEN_FILE, seen)
             sys.exit(0)
 
-        new_count = 0
+        new_count = skipped_seen = no_xml = no_tx = fetch_err = 0
+
+        print(f"  Processing {len(entries)} entries...", flush=True)
 
         for entry in entries:
             # ── Per-entry runtime check ────────────────────────────────────────
             if time.time() - START_TIME > MAX_RUNTIME:
-                print("Max runtime reached mid-cycle — saving and exiting cleanly.")
+                print("Max runtime reached mid-cycle — saving and exiting cleanly.", flush=True)
                 break
             filing_id = entry["id"]
 
-            # Skip already processed filings
+            # Skip already successfully processed filings
             if filing_id in seen:
+                skipped_seen += 1
                 continue
 
-            seen[filing_id] = True
-            print(f"  → New filing: {entry['title'][:60]}")
+            print(f"  → {entry['title'][:55]}  [{filing_id}]", flush=True)
 
             # Get the filing index page to find the XML
             xml_url = get_form4_xml_url(entry["filing_url"])
             if not xml_url:
-                print("    [Could not find XML — skipping]")
+                print("    [Could not find XML URL — skipping]", flush=True)
+                no_xml += 1
                 time.sleep(0.5)
                 continue
 
             # Fetch and parse the Form 4 XML
             xml_text = fetch_url(xml_url)
             if not xml_text:
+                print("    [Could not fetch XML — skipping]", flush=True)
+                fetch_err += 1
                 time.sleep(0.5)
                 continue
 
             filing = parse_form4_xml(xml_text, entry)
             if not filing:
-                print("    [No transactions found — skipping]")
+                print("    [No transactions in XML — skipping]", flush=True)
+                no_tx += 1
                 time.sleep(0.5)
                 continue
 
-            # Print plain English summaries to console
+            # Only mark seen AFTER a successful parse so failures are retried next cycle
+            seen[filing_id] = True
+
             for summary in filing["summaries"]:
-                print(f"    {summary}")
+                print(f"    {summary}", flush=True)
 
             all_filings.append(filing)
             new_count += 1
@@ -451,12 +459,15 @@ def run_pipeline():
 
         # Save progress after each cycle
         save_json_file(OUTPUT_FILE, all_filings)
-        save_json_file(SEEN_FILE, seen)
+        if not args.once:
+            # Only persist seen_filings.json in loop mode — CI starts fresh each run
+            save_json_file(SEEN_FILE, seen)
 
-        if new_count:
-            print(f"  ✓ {new_count} new filing(s) saved to {OUTPUT_FILE}")
-        else:
-            print(f"  ✓ No new filings this cycle")
+        print(
+            f"  ✓ Cycle summary: {new_count} saved | {skipped_seen} already-seen | "
+            f"{no_xml} no-xml | {no_tx} no-tx | {fetch_err} fetch-err",
+            flush=True,
+        )
 
         if args.once:
             print("  --once flag set — exiting after one cycle.")
